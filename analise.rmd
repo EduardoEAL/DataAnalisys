@@ -1,0 +1,181 @@
+---
+title: "Analise de dados de uma empresa de compartilhamento de bicicletas"
+author: "Eduardo Lisboa"
+date: "2025-04-15"
+output: html_document
+---
+
+#Análise de dados de viagem com bicicletas alugadas
+
+##Será iniciada a análise dos dados públicos fornecidos em plataformas de estudo, estes dados contém em sua estrutura trajetos, tipos de usuario, locais e datas de início e chegada
+
+###O arquivo tem o formato .csv
+
+###Utilizaresmos o nome fictício de Cyclist para nos referirmos à empresa em questão
+
+Bibliotecas utilizadas para análise e manipulação dos dados:
+```{r}
+	library(tidyverse)
+	library(ggplot2)
+```
+
+Carregando os dados para um novo dataframe:
+```{r}
+	q1_2019 <- read_csv("Divvy_Trips_2019_Q1.csv")
+	q1_2020 <- read_csv("Divvy_Trips_2020_Q1.csv")
+
+```
+Utilizaremos os dados referentes ao 1° trimestre de 2019 e 1° trimestre de 2020
+
+Visualizando parte das informações e as características das colunas dos dados
+```{r}
+	head(q1_2019)
+	head(q1_2020)
+	colnames(q1_2019)
+	colnames(q1_2020)
+```
+
+Percebemos que os dois datasets tem nomes e numero de colunas diferentes, mas que representam a mesma informação, deste modo temos que identificar as colunas com mesmo tipo de informação para melhorarmos nosso dataframe
+
+Vamos alterar o nome das colunas do q1 2019 para os mesmos nomes contidos em q1_2020
+```{r}
+	q1_2019 <- rename(q1_2019, ride_id = trip_id, rideable_type = bikeid, start_station_name = from_station_name, member_casual = usertype, started_at = start_time, ended_at = end_time, start_station_id = from_station_id, end_station_name = to_station_name, end_station_id = to_station_id)
+```
+
+Verificando se a alteração foi feita
+```{r}
+	str(q1_2019)
+	str(q1_2020)
+```
+
+Convertendo o tipo da informação das colunas para evitar erros
+```{r}
+	q1_2019 <- mutate(q1_2019, ride_id = as.character(ride_id), rideable_type = as.character(rideable_type))
+```
+
+Iremos juntar os dados dos dois dataframes em um único dataset
+```{r}
+	all_trips <- bind_rows(q1_2019, q1_2020)
+```
+
+Vamos separar apenas os dados que consideramos mais importantes para nossa análise
+```{r}
+	all_trips <- all_trips %>% select(-c(start_lat, start_lng, end_lat, end_lng, birthyear, gender, "tripduration"))	
+```
+
+Checando as caracteristicas do novo dataframe, para verifica se foi criado corretamente com as tabelas e caracteristicas que especificamos anteriormente
+```{r}
+	head(all_trips)
+	colnames(all_trips)
+	nrow(all_trips)
+	dim(all_trips)
+	str(all_trips)
+	summary(all_trips)
+```
+
+Ao visualizarmos os dados, foi identificado que a coluna member_casual contém 4 tipos de dados no lugar de apenas 2, dessa forma a seguir iremos identificar quais dados podem ter sua descrição corrigida
+```{r}
+	table(all_trips$member_casual)
+```
+
+Alterando os dados de maneira a limitar a 2 tipos, pois os outros 2 tipos descrevem a mesma informação, apenas de maneira diferente
+```{r}
+	all_trips <- all_trips %>% 
+	mutate(member_casual = recode(member_casual, "Subscriber" = "member", "Customer" = "casual"))
+```
+
+Verificando se foi feito corretamente
+```{r}
+	table(all_trips$member_casual)
+```
+
+Para um melhor resultado no plot dos dados, iremos separar o campo data, em outros campos, como dia da semana, duração, mes, ano, dia
+```{r}
+	all_trips$date <- as.Date(all_trips$started_at)
+	all_trips$month <- format(as.Date(all_trips$date), "%m")
+	all_trips$day <- format(as.Date(all_trips$date), "%d")
+	all_trips$year <- format(as.Date(all_trips$date), "%Y")
+	all_trips$day_of_week <- format(as.Date(all_trips$date), "%A", locale = "C")
+	all_trips$ride_length <- difftime(all_trips$ended_at, all_trips$started_at)
+```
+
+Agora temos que converter o tipo de informação apresentada para realizarmos calculos
+```{r}
+	str(all_trips)
+	is.factor(all_trips$ride_length) 
+	is.numeric(all_trips$ride_length)
+	all_trips$ride_length <- as.numeric(as.character(all_trips$ride_length))
+	is.numeric(all_trips$ride_length)
+```
+
+Criando um novo dataframe, onde eliminaremos os usos da bicicleta que foram considerados testes ou manutenção que foi identificada pela sigla "HQ QR"
+```{r}
+	all_trips_v2 <- all_trips[!(all_trips$start_station_name == "HQ QR" | all_trips$ride_length < 0),]
+	summary(all_trips_v2$ride_length)
+```
+
+Calculando alguns indicadores comparando a duração do uso com o tipo de membro
+```{r}
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = mean)
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = median)
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = max)
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = min)
+```
+
+Calculando e separando por dia da semana
+```{r}
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+```
+
+Definindo níveis e ordenando por dia da semana, pois anteriormente os dados não estavam em ordem
+```{r}
+	all_trips_v2$day_of_week <- ordered(all_trips_v2$day_of_week, levels=c("domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"))
+```
+
+Verificando as alterações anteriores
+```{r}
+	aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+```
+
+alterando nosso dataframe para criar uma nova coluna e extrair o valor de weekday, agrupando e calculando a quantidade média por dia da semana de viagens separando por tipo de membro
+```{r}
+	all_trips_v2 %>%
+	mutate(weekday = wday(started_at, label = TRUE)) %>%
+	group_by(member_casual, weekday) %>%
+	summarize(number_of_rides = n(), average_duration = mean (ride_length)) %>%
+	arrange(member_casual, weekday)
+```
+
+Criando um grafico de colunas com a quantidade de uso da bicicletas separados por dia da semana, preenchido por tipo de usuario
+```{r}
+	all_trips_v2 %>%
+	mutate(weekday = wday(started_at, label = TRUE)) %>%
+	group_by(member_casual, weekday) %>%
+	summarise(number_of_rides = n(), average_duration = mean(ride_length)) %>%
+	arrange(member_casual, weekday) %>%
+	ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) + geom_col(position = "dodge")
+```
+
+Desta vez criamos um grafico de barras que informa a duração média do uso das bicicletas por dia da semana e preenchido pelo tipo de membro
+```{r}
+	all_trips_v2 %>%
+	mutate(weekday = wday(started_at, label = TRUE)) %>%
+	group_by(member_casual, weekday) %>%
+	summarise(number_of_rides = n(), average_duration = mean(ride_length)) %>%
+	arrange(member_casual, weekday) %>%
+	ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) + geom_col(position = "dodge")
+```
+
+Com este bloco de código podemos separar os dados que utilizamos nos graficos anteriores em um novo dataframe para que possamos utiliza-los em outras análises
+```{r, eval=FALSE}
+	counts <- aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+	write_csv(counts, file = "avg_ride_length.csv")
+	summary(all_trips_v2$ride_length)
+	unique(all_trips_v2$member_casual)
+	unique(all_trips_v2$day_of_week)
+	head(all_trips_v2$day_of_week)
+```
+
+##Conclusão da análise
+Podemos observar ao focar nos tipos de usuário e seus hábitos de uso das bicicletas durante a semana que há diferênça de comportamento, entre "pessoas que pagam a assinatura" e "pessoas que utilizam casualmente", de modo a verificar padrões de comportamento que podem ser utilizados para campanhas publicitarias focadas em aumentar o número de assinaturas em determinado tipo de usuário de modo a trazer benefício mútuo para usuário e empresa.
+
