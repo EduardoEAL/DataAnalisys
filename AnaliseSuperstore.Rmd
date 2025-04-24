@@ -1,0 +1,158 @@
+---
+title: "analise superstore"
+author: "Eduardo Lisboa"
+date: "2025-04-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Análise dos dados do dataset SuperStore
+
+O dataset a ser analisado contém informações sobre vendas da empresa SuperStore
+
+Atribuindo o dataset à um dataframe
+
+```{r, echo=FALSE}
+  install.packages("tidyverse")
+  install.packages("ggplot2")
+```
+
+
+```{r}
+  library(tidyverse)
+  library(ggplot2)
+  sales <- read.csv("train.csv")
+```
+
+Visualizado um pouco dos dados e as caracteristicas das tabelas
+```{r}
+  head(sales)
+  str(sales)
+```
+Identificando dados com valores NA ou Nulos
+```{r}
+  colSums(is.na(sales))
+```
+Passando os dados que estão sem o código postal para um dataframe caso necessidade de realizar mais consultas e verificando se há duplicatas
+```{r}
+  sales_exc <- sales[is.na(sales$Postal.Code), ]
+  sales_clean <- sales[!is.na(sales$Postal.Code), ]
+  sum(duplicated(sales_clean))
+```
+Verificando se há erros de classificação de dados com poucos tipos
+```{r}
+  table(sales_clean$Ship.Mode)
+  table(sales_clean$Segment)
+  table(sales_clean$Category)
+  table(sales_clean$Region)
+```
+
+Convertendo o formato das datas para melhor maneabilidade das informações e criando uma nova coluna com o ano e mês separado 
+```{r}
+  sales_clean_v2 <- sales_clean
+  sales_clean_v2$Order.Date <- as.Date(sales_clean_v2$Order.Date, format = "%d/%m/%Y")
+  sales_clean_v2$Ship.Date <- as.Date(sales_clean_v2$Ship.Date, format = "%d/%m/%Y")
+  sales_clean_v2 <- sales_clean_v2 %>%
+    mutate(order_year = year(Order.Date)) %>%
+    mutate(order_month = month(Order.Date))
+```
+Limpeza e organização dos dados já feita
+
+Inicio da Análise Exploratória
+
+Vamos verificar as vendas por ano
+```{r}
+  sales_by_year <- sales_clean_v2 %>%
+    group_by(order_year) %>%
+    summarise(total_sales = sum(Sales, na.rm = "TRUE"))
+  head(sales_by_year)
+```
+
+```{r}
+  ggplot(sales_by_year, aes(x = order_year, y = total_sales)) +
+    geom_bar(stat = "identity", fill = "blue") +
+    scale_y_continuous(labels = scales::comma) +
+    labs(title = "Total de Vendas por ano", x = "Ano", y = "Total de Vendas")
+```
+Podemos observar que estamos com 2 anos seguidos de crescimento, que ultrapassaram o total de vendas de 2015 e 2016
+
+Vamos agora verificar o histórioco mensal de nossos 4 anos
+
+iniciando em 2015 até 2018
+```{r}
+  sales_month_geral <- sales_clean_v2 %>%
+  mutate(month_name = factor(month(order_month, label = TRUE, abbr = FALSE))) %>% 
+  group_by(month_name) %>%
+  summarise(total_sales_month = sum(Sales, na.rm = TRUE))
+  head(sales_month_geral)
+```
+
+```{r}
+  ggplot(sales_month_geral, aes(x = month_name, y = total_sales_month, group = 1))+
+    geom_line(color = "blue", linewidth = 1) +
+    geom_point(color = "red", size = 3) +
+    scale_y_continuous(labels = scales::comma) +
+    labs(title = "Vendas por meses, todos os anos", x = "Mês", y = "Total de Vendas")
+```
+Observamos que as menores vendas foram nos meses de janeiro e fevereiro, com a estabilidade das vendas até agosto, tendo um grande crescimento a partir de setembro seguido de uma queda em outubro e o pico das vendas em novembro, sendo os melhores meses, novembro e dezembro
+
+
+
+Agora vamos verificar por regiao, as vendas totais que registramos
+
+```{r}
+  sales_by_region <- sales_clean_v2 %>%
+  group_by(Region) %>%
+  summarise(total_sales = n()) %>%
+  arrange(desc(total_sales))
+  head(sales_by_region)
+```
+
+```{r}
+  ggplot(sales_by_region, aes(x = "", y = total_sales, fill = Region)) + 
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() + 
+  labs(title = "Total de vendas por região", x = "Região", y = "Total de vendas")
+```
+Arrecadação total
+```{r}
+  value_by_region <- sales_clean_v2 %>%
+  group_by(Region) %>%
+  summarise(total_sales = sum(Sales, na.rm = FALSE)) %>%
+  arrange(desc(total_sales))
+  head(value_by_region)
+```
+
+```{r}
+  ggplot(value_by_region, aes(x = Region, y = total_sales)) +
+  geom_bar(stat="identity", fill = "red") +
+  scale_y_continuous(labels = scales::comma) +
+  labs(title = "Arrecadação total por região", x = "Região", y = "Total arrecadado")
+```
+
+Verificamos que a região West tem maior quantidade de vendas e consequentemente maior valor arrecadado
+
+###Resumo da Analise
+O que pode ser percebido:
+
+1° - Foi realizada a analise dos ultimos quatro anos dos dados de venda, sendo informado que o ano de 2018 teve a maior arrecadação, assim como descrito no gráfico
+
+2° - Foi percebido que entre as regiões que foram registradas as vendas, a região West foi a que mais vendeu e mais arrecadou entre as outras regiões
+
+3° Sazonalidade das vendas, os meses de janeiro e fevereiro obtiveram os piores números, com um pequeno aumento para março e estabilidade até agosto, já para o mês de setembro temos um aumento de 2x nas vendas, seguido de uma queda em outubro e o registro das maiores vendas para novembro, com uma pequena queda em dezembro, sendo assim o melhores meses são novembro, dezembro e setembro
+
+4° - Com os dados coletados não temos informações sufucientes para calcular o lucro/prejuizo por produto
+
+5° - Não temos informções de descontos para podermos comparar com as vendas e extrair se há aumento ou diminuição dos lucros com descontos
+
+Recomendações
+
+1 - Por ter sido verificado a sazonalidade das vendas, há a possibilidade de a equipe de marketing avaliar novas abordagens para aumentar o numero de vendas nos meses que já há maior demanda, passando por uma possível remanejamento do orçamento de marketing dos meses com pouca demanda para meses com maior potencial.
+
+2 - Pelo histórico dos ultimos 2 anos verificamos que ouve aumento sutil nas vendas o que pode nos indicar que para o ano de 2019 pode haver o aumento contínuo
+
+3 - Com os dados, apesar de não ter sido o foco desta análise, será possível a avaliação das categorias e itens mais vendidos em cada região, podendo desta forma dar inicio à um remanejamento logistico, de modo à diminuir custos de logistica, tendo como benefício também a diminuição dos prazos de entrega para o cliente
